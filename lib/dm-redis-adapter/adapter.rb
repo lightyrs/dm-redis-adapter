@@ -18,7 +18,7 @@ module DataMapper
       def create(resources)
         storage_name = resources.first.model.storage_name
         resources.each do |resource|
-          initialize_serial(resource, @redis.incr("#{storage_name}:#{redis_key_for(resource.model)}:serial"))
+          initialize_serial(resource, resource.key)
           @redis.sadd(key_set_for(resource.model), resource.key.join)
         end
         update_attributes(resources)
@@ -295,7 +295,52 @@ module DataMapper
       #   Array of id's of all members for an indexed field
       # @api private
       def find_indexed_matches(subject, value)
-        @redis.smembers("#{subject.model.storage_name}:#{subject.name}:#{encode(value)}").map {|id| id.to_i}
+        @redis.smembers("#{subject.model.storage_name}:#{subject.name}:#{encode(value)}").map { |pk_val| reverse_typecast(pk_val) }
+      end
+
+      ##
+      # If it quacks like a date in a string, call it a date.
+      # If it quacks like a integer in a string, call it an integer.
+      #
+      # @return Integer or Date or String
+      #   PK Value reverse typecast
+      # @api private
+      def reverse_typecast(string)
+        return string.to_i if is_i?(string)
+        return parse_date_string(string) if is_date?(string)
+        string
+      end
+
+      ##
+      # Does the string quack like an integer
+      #
+      # @return Integer or nil
+      #   Regex match or nil
+      # @api private
+      def is_i?(string)
+       !!(string =~ /^[-+]?[0-9]+$/)
+      end
+
+      ##
+      # Does the string quack like an date
+      #
+      # @return Date or nil
+      #   Date or false
+      # @api private
+      def is_date?(string)
+        parse_date_string(string)
+      rescue ArgumentError
+        false
+      end
+
+      ##
+      # Convert Date-String to Date
+      #
+      # @return Date
+      #   Date-String to Date
+      # @api private
+      def parse_date_string(string)
+        Date.strptime(string)
       end
 
       ##
